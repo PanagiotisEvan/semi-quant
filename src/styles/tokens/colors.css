@@ -1,0 +1,15 @@
+@theme {
+    --color-bg-a: #000000;
+    --color-bg-b: #151515;
+    --color-bg-c: #191919;
+    --color-bg-d: #2c2c2c;
+    --color-bg-e: #3c3c3c;
+
+    --color-accent: #90d549;
+
+    --color-error: #c37e7e;
+    --color-warn: #e1b664;
+
+    --color-fg-a: #ffffff;
+    --color-fg-b: #bdbdbd;
+}

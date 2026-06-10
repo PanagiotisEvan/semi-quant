@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+
+@import 'styles/tokens/tokens.css';
+@import 'styles/tokens/fonts.css';
+
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    line-height: 1.075;
+    letter-spacing: -1.5%;
+    text-wrap: balance;
+    overscroll-behavior: none;
+
+    font-family: 'Inter', sans-serif;
+
+    color: var(--color-fg-a);
+    background: var(--color-bg-a);
+  }
+}
