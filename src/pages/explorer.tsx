@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Navbar } from '../components/layout/navbar'
 import { Properties } from '../components/dedicated/properties'
 import { LatticeViewer } from '../components/dedicated/lattice-view'
 import { MATERIALS } from '../data/materials'
@@ -19,11 +20,9 @@ export function Explorer() {
     return (
         <div className="w-full h-screen grid grid-cols-[320px_1fr] grid-rows-[auto_1fr] gap-0 overflow-hidden">
 
-            {/* Header */}
-            <header className="col-span-2 flex items-center justify-between p-md border-b border-bg-d">
-                <p className="p1">QSilicon</p>
-                <span className="text-sm text-fg-b">Material Explorer</span>
-            </header>
+            <div className="col-span-2">
+                <Navbar subtitle="Material Explorer" />
+            </div>
 
             {/* Left — Properties panel */}
             <aside className="row-start-2 border-r border-bg-d overflow-y-auto">
