@@ -137,13 +137,12 @@ export interface SemiconductorProperties {
 }
 
 export function computeProperties(
-  materialId: MaterialId,
+  mat: MaterialParams,
   T: number,
   N: number,
   type: DopingType,
   strain: number,
 ): SemiconductorProperties {
-  const mat          = MATERIALS[materialId];
   const Eg           = bandGap(mat, T, strain);
   const { n, p, ni } = carrierConcentrations(mat, T, N, strain);
   const mu_n         = mobility(mat, T, N, strain, "n");

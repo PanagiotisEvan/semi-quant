@@ -1,3 +1,5 @@
+import { Properties } from './components/dedicated/properties'
+
 export function App() {
     return (
         <div className="w-full h-screen grid grid-cols-[320px_1fr_360px] grid-rows-[auto_1fr] gap-0 overflow-hidden">
@@ -10,7 +12,7 @@ export function App() {
 
             {/* Left — Properties panel */}
             <aside className="row-start-2 border-r border-bg-d overflow-y-auto">
-                <p className="text-fg-b text-sm">Properties</p>
+                <Properties />
             </aside>
 
             {/* Center — Viewfinder */}
