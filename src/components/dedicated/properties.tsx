@@ -173,7 +173,7 @@ export function Properties({
                     label="Size"
                     value={supercellN}
                     min={1}
-                    max={5}
+                    max={3}
                     step={1}
                     formatValue={(v) => isGraphene ? `${v}×${v}` : `${v}×${v}×${v}`}
                     onChange={setSupercellN}
