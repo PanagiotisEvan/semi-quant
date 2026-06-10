@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import * as $3Dmol from '3dmol'
 import type { MaterialId, MaterialParams, DopingType } from '../../data/formulas'
 import {
@@ -24,13 +24,13 @@ const SUPERCELL: Record<MaterialId, [number, number, number]> = {
     Graphene: [4, 4, 1],
 }
 
-// ─── Cell parameters per material (matching the CIF files) ─────────────────────
+// ─── Cell parameters per material ──────────────────────────────────────────────
 
 interface CellParams {
     a: number
     b: number
     c: number
-    gamma: number // degrees
+    gamma: number
 }
 
 const CELL_PARAMS: Record<MaterialId, CellParams> = {
@@ -50,6 +50,20 @@ const ELEM_COLORS: Record<string, string> = {
 const ELEM_RADII: Record<string, number> = {
     Si: 0.45, Ge: 0.47, Ga: 0.42, N: 0.35, C: 0.38,
     P: 0.48, B: 0.36, As: 0.50, Mg: 0.44,
+}
+
+// ─── Pre-computed fractional atom data per material ────────────────────────────
+
+interface FracAtom {
+    elem: string
+    fx: number
+    fy: number
+    fz: number
+}
+
+interface ParsedMaterial {
+    fracAtoms: FracAtom[]  // all supercell atoms in fractional coords
+    gammaRad: number
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -73,7 +87,10 @@ export function LatticeViewer({
 }: LatticeViewerProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewerRef = useRef<$3Dmol.GLViewer | null>(null)
+    const parsedRef = useRef<Record<string, ParsedMaterial>>({})
     const [cifCache, setCifCache] = useState<Record<string, string>>({})
+    const lastStrainRef = useRef<number | null>(null)
+    const lastMaterialRef = useRef<MaterialId | null>(null)
 
     // Create the viewer once
     useEffect(() => {
@@ -90,7 +107,7 @@ export function LatticeViewer({
         }
     }, [])
 
-    // Fetch CIF file when material changes
+    // Fetch & parse CIF file when material changes
     useEffect(() => {
         const path = CIF_PATHS[materialId]
         if (cifCache[path]) return
@@ -99,147 +116,153 @@ export function LatticeViewer({
             .then(res => res.text())
             .then(text => {
                 setCifCache(prev => ({ ...prev, [path]: text }))
+
+                // Pre-parse: extract base atoms and build supercell fractional coords
+                if (!parsedRef.current[materialId]) {
+                    const viewer = viewerRef.current
+                    if (!viewer) return
+
+                    const cell = CELL_PARAMS[materialId]
+                    const gammaRad = cell.gamma * Math.PI / 180
+                    const sinG = Math.sin(gammaRad)
+                    const cosG = Math.cos(gammaRad)
+
+                    // Temporarily load CIF to read atom positions
+                    const tempModel = viewer.addModel(text, 'cif')
+                    const baseAtoms = tempModel.selectedAtoms({})
+
+                    // Convert to fractional
+                    const baseFrac: FracAtom[] = baseAtoms.map(a => {
+                        const x = a.x ?? 0
+                        const y = a.y ?? 0
+                        const z = a.z ?? 0
+                        const fy = y / (cell.b * sinG)
+                        const fx = (x - cell.b * cosG * fy) / cell.a
+                        const fz = z / cell.c
+                        return { elem: a.elem ?? '', fx, fy, fz }
+                    })
+
+                    viewer.removeAllModels()
+
+                    // Build supercell fractional positions
+                    const [nx, ny, nz] = SUPERCELL[materialId]
+                    const fracAtoms: FracAtom[] = []
+
+                    for (let ix = 0; ix < nx; ix++) {
+                        for (let iy = 0; iy < ny; iy++) {
+                            for (let iz = 0; iz < nz; iz++) {
+                                for (const base of baseFrac) {
+                                    fracAtoms.push({
+                                        elem: base.elem,
+                                        fx: base.fx + ix,
+                                        fy: base.fy + iy,
+                                        fz: base.fz + iz,
+                                    })
+                                }
+                            }
+                        }
+                    }
+
+                    parsedRef.current[materialId] = { fracAtoms, gammaRad }
+                }
             })
     }, [materialId])
 
-    // Rebuild scene when material or parameters change
+    // Build XYZ from fractional coords + strain (pure math, no 3Dmol)
+    const buildXYZ = useCallback((matId: MaterialId, strainVal: number, nu: number): string | null => {
+        const parsed = parsedRef.current[matId]
+        if (!parsed) return null
+
+        const cell = CELL_PARAMS[matId]
+        const { fracAtoms, gammaRad } = parsed
+
+        const sa = cell.a * (1 + strainVal)
+        const sb = cell.b * (1 - nu * strainVal)
+        const sc = cell.c * (1 - nu * strainVal)
+
+        const cosG = Math.cos(gammaRad)
+        const sinG = Math.sin(gammaRad)
+
+        // Strained lattice vectors
+        const vax = sa, vay = 0
+        const vbx = sb * cosG, vby = sb * sinG
+        const vcz = sc
+
+        // Compute centered positions
+        let cx = 0, cy = 0, cz = 0
+        const n = fracAtoms.length
+
+        const positions = new Float64Array(n * 3)
+        for (let i = 0; i < n; i++) {
+            const a = fracAtoms[i]
+            const x = a.fx * vax + a.fy * vbx
+            const y = a.fx * vay + a.fy * vby
+            const z = a.fz * vcz
+            positions[i * 3] = x
+            positions[i * 3 + 1] = y
+            positions[i * 3 + 2] = z
+            cx += x; cy += y; cz += z
+        }
+        cx /= n; cy /= n; cz /= n
+
+        // Build XYZ string
+        const lines = [`${n}`, 'supercell']
+        for (let i = 0; i < n; i++) {
+            const a = fracAtoms[i]
+            lines.push(`${a.elem} ${(positions[i * 3] - cx).toFixed(4)} ${(positions[i * 3 + 1] - cy).toFixed(4)} ${(positions[i * 3 + 2] - cz).toFixed(4)}`)
+        }
+        return lines.join('\n')
+    }, [])
+
+    // Full rebuild when material changes
     useEffect(() => {
         const viewer = viewerRef.current
-        const cifText = cifCache[CIF_PATHS[materialId]]
-        if (!viewer || !cifText) return
+        if (!viewer || !parsedRef.current[materialId]) return
 
         viewer.removeAllModels()
         viewer.removeAllShapes()
         viewer.removeAllLabels()
 
-        const cell = CELL_PARAMS[materialId]
-        const [nx, ny, nz] = SUPERCELL[materialId]
-        const nu = mat.nu
-
-        // Apply strain: uniaxial along x, Poisson contraction on y/z
-        const strainedA = cell.a * (1 + strain)
-        const strainedB = cell.b * (1 - nu * strain)
-        const strainedC = cell.c * (1 - nu * strain)
-
-        const gammaRad = cell.gamma * Math.PI / 180
-
-        // Strained lattice vectors
-        const va = { x: strainedA, y: 0, z: 0 }
-        const vb = { x: strainedB * Math.cos(gammaRad), y: strainedB * Math.sin(gammaRad), z: 0 }
-        const vc = { x: 0, y: 0, z: strainedC }
-
-        // Load one copy of the CIF to get base atom positions
-        const baseModel = viewer.addModel(cifText, 'cif')
-        const baseAtoms = baseModel.selectedAtoms({})
-
-        // Record the unstrained positions from the CIF
-        interface BaseAtom { elem: string; x: number; y: number; z: number }
-        const basePositions: BaseAtom[] = baseAtoms.map(a => ({
-            elem: a.elem ?? '',
-            x: a.x ?? 0,
-            y: a.y ?? 0,
-            z: a.z ?? 0,
-        }))
-
-        // Convert cartesian → fractional (inverse of lattice matrix)
-        // For orthorhombic (gamma=90): trivial division
-        // For hexagonal (gamma=120): need proper inverse
-        function cartToFrac(x: number, y: number, z: number) {
-            const sinG = Math.sin(gammaRad)
-            const cosG = Math.cos(gammaRad)
-            // Inverse of the lattice matrix [va0, vb0, vc0]
-            const fy = y / (cell.b * sinG)
-            const fx = (x - cell.b * cosG * fy) / cell.a
-            const fz = z / cell.c
-            return { fx, fy, fz }
-        }
-
-        // Now clear the base model — we'll rebuild everything with strained positions
-        viewer.removeAllModels()
-
-        // Build all supercell atoms with strained positions
-        interface PlacedAtom { elem: string; x: number; y: number; z: number }
-        const allAtoms: PlacedAtom[] = []
-
-        for (let ix = 0; ix < nx; ix++) {
-            for (let iy = 0; iy < ny; iy++) {
-                for (let iz = 0; iz < nz; iz++) {
-                    for (const base of basePositions) {
-                        // Get fractional coords of this atom in the original cell
-                        const frac = cartToFrac(base.x, base.y, base.z)
-
-                        // Apply fractional offset for supercell position
-                        const fx = frac.fx + ix
-                        const fy = frac.fy + iy
-                        const fz = frac.fz + iz
-
-                        // Convert back to cartesian using STRAINED lattice vectors
-                        const x = fx * va.x + fy * vb.x + fz * vc.x
-                        const y = fx * va.y + fy * vb.y + fz * vc.y
-                        const z = fx * va.z + fy * vb.z + fz * vc.z
-
-                        allAtoms.push({ elem: base.elem, x, y, z })
-                    }
-                }
-            }
-        }
-
-        // Center the structure
-        let cx = 0, cy = 0, cz = 0
-        for (const a of allAtoms) { cx += a.x; cy += a.y; cz += a.z }
-        cx /= allAtoms.length; cy /= allAtoms.length; cz /= allAtoms.length
-
-        // Build an XYZ string from the placed atoms (3Dmol parses XYZ easily)
-        let xyz = `${allAtoms.length}\nstrained supercell\n`
-        for (const a of allAtoms) {
-            xyz += `${a.elem} ${(a.x - cx).toFixed(6)} ${(a.y - cy).toFixed(6)} ${(a.z - cz).toFixed(6)}\n`
-        }
+        const xyz = buildXYZ(materialId, strain, mat.nu)
+        if (!xyz) return
 
         viewer.addModel(xyz, 'xyz')
-
-        // ─── Doping ────────────────────────────────────────────────────────
-        const primaryElem = materialId === 'GaN' ? 'Ga'
-            : materialId === 'Graphene' ? 'C'
-            : materialId === 'Ge' ? 'Ge' : 'Si'
-
-        const dopantCount = dopantVisualCount(dopingConcentration)
-        const dopantSym = dopantAtomSymbol(materialId, dopingType)
-        const dopantColor = ELEM_COLORS[dopantSym] ?? '#ff9900'
-        const dopantRadius = ELEM_RADII[dopantSym] ?? 0.40
-
-        // ─── Styling ──────────────────────────────────────────────────────
-        for (const elem of Object.keys(ELEM_COLORS)) {
-            const color = ELEM_COLORS[elem]
-            const radius = ELEM_RADII[elem] ?? 0.40
-            viewer.setStyle({ elem }, {
-                sphere: { radius, color },
-                stick: { radius: 0.08, color: '#2c2c2c' },
-            })
-        }
-
-        // Override dopant atoms
-        if (dopantCount > 0) {
-            const primaryAtoms = viewer.selectedAtoms({ elem: primaryElem })
-            const step = Math.max(1, Math.floor(primaryAtoms.length / dopantCount))
-
-            for (let i = 0; i < dopantCount && i * step < primaryAtoms.length; i++) {
-                const atom = primaryAtoms[i * step]
-                if (atom?.serial !== undefined) {
-                    viewer.setStyle(
-                        { serial: atom.serial },
-                        {
-                            sphere: { radius: dopantRadius, color: dopantColor },
-                            stick: { radius: 0.08, color: '#2c2c2c' },
-                        },
-                    )
-                }
-            }
-        }
-
+        applyStyles(viewer, materialId, dopingConcentration, dopingType)
         viewer.zoomTo()
         viewer.render()
 
-    }, [materialId, mat, cifCache, temperature, dopingConcentration, dopingType, strain])
+        lastMaterialRef.current = materialId
+        lastStrainRef.current = strain
+    }, [materialId, cifCache])
+
+    // Geometry update when strain changes (rebuild model, keep camera)
+    useEffect(() => {
+        const viewer = viewerRef.current
+        if (!viewer || !parsedRef.current[materialId]) return
+        if (lastMaterialRef.current !== materialId) return // material effect handles this
+        if (lastStrainRef.current === strain) return
+
+        viewer.removeAllModels()
+
+        const xyz = buildXYZ(materialId, strain, mat.nu)
+        if (!xyz) return
+
+        viewer.addModel(xyz, 'xyz')
+        applyStyles(viewer, materialId, dopingConcentration, dopingType)
+        viewer.render() // no zoomTo — keep current camera
+
+        lastStrainRef.current = strain
+    }, [strain])
+
+    // Style-only update when doping changes (no geometry rebuild)
+    useEffect(() => {
+        const viewer = viewerRef.current
+        if (!viewer) return
+        if (!viewer.getModel()) return
+
+        applyStyles(viewer, materialId, dopingConcentration, dopingType)
+        viewer.render()
+    }, [dopingConcentration, dopingType, temperature])
 
     return (
         <div
@@ -248,4 +271,49 @@ export function LatticeViewer({
             style={{ position: 'relative' }}
         />
     )
+}
+
+// ─── Styling helper ────────────────────────────────────────────────────────────
+
+function applyStyles(
+    viewer: $3Dmol.GLViewer,
+    materialId: MaterialId,
+    dopingConcentration: number,
+    dopingType: DopingType,
+) {
+    const primaryElem = materialId === 'GaN' ? 'Ga'
+        : materialId === 'Graphene' ? 'C'
+        : materialId === 'Ge' ? 'Ge' : 'Si'
+
+    const dopantCount = dopantVisualCount(dopingConcentration)
+    const dopantSym = dopantAtomSymbol(materialId, dopingType)
+    const dopantColor = ELEM_COLORS[dopantSym] ?? '#ff9900'
+    const dopantRadius = ELEM_RADII[dopantSym] ?? 0.40
+
+    // Base styles
+    for (const elem of Object.keys(ELEM_COLORS)) {
+        viewer.setStyle({ elem }, {
+            sphere: { radius: ELEM_RADII[elem] ?? 0.40, color: ELEM_COLORS[elem] },
+            stick: { radius: 0.08, color: '#2c2c2c' },
+        })
+    }
+
+    // Dopant overrides
+    if (dopantCount > 0) {
+        const primaryAtoms = viewer.selectedAtoms({ elem: primaryElem })
+        const step = Math.max(1, Math.floor(primaryAtoms.length / dopantCount))
+
+        for (let i = 0; i < dopantCount && i * step < primaryAtoms.length; i++) {
+            const atom = primaryAtoms[i * step]
+            if (atom?.serial !== undefined) {
+                viewer.setStyle(
+                    { serial: atom.serial },
+                    {
+                        sphere: { radius: dopantRadius, color: dopantColor },
+                        stick: { radius: 0.08, color: '#2c2c2c' },
+                    },
+                )
+            }
+        }
+    }
 }
