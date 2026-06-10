@@ -2,7 +2,10 @@
 
 @import 'styles/tokens/tokens.css';
 @import 'styles/tokens/fonts.css';
-@import 'styles/utilities/slider.css';
+@import 'styles/tokens/colors.css';
+
+@import 'styles/utilities/typography.css';
+
 
 
 @layer base {

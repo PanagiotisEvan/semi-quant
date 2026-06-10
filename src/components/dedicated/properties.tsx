@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Slider } from '../reusable/form/slider'
+import { Button } from '../reusable/form/button'
 import { MATERIALS } from '../../data/materials'
 import { computeProperties, type MaterialId, type DopingType } from '../../data/formulas'
 
@@ -38,20 +39,38 @@ interface ReadoutRow {
     unit: string
 }
 
-export function Properties() {
-    const [materialId, setMaterialId] = useState<MaterialId>('Si')
-    const [T, setT]                   = useState(300)
-    const [logN, setLogN]             = useState(16)
-    const [dopingType, setDopingType] = useState<DopingType>('n')
-    const [strainPct, setStrainPct]   = useState(0)
+interface PropertiesProps {
+    materialId: MaterialId
+    temperature: number
+    logDoping: number
+    dopingType: DopingType
+    strainPct: number
+    onMaterialChange: (id: MaterialId) => void
+    onTemperatureChange: (t: number) => void
+    onLogDopingChange: (n: number) => void
+    onDopingTypeChange: (d: DopingType) => void
+    onStrainPctChange: (s: number) => void
+}
 
+export function Properties({
+    materialId,
+    temperature: T,
+    logDoping: logN,
+    dopingType,
+    strainPct,
+    onMaterialChange: setMaterialId,
+    onTemperatureChange: setT,
+    onLogDopingChange: setLogN,
+    onDopingTypeChange: setDopingType,
+    onStrainPctChange: setStrainPct,
+}: PropertiesProps) {
     const mat    = MATERIALS[materialId]
     const N      = 10 ** logN
     const strain = strainPct / 100
 
     const props = useMemo(
-        () => computeProperties(mat, T, N, dopingType, strain),
-        [mat, T, N, dopingType, strain],
+        () => computeProperties(mat, T, N, strain),
+        [mat, T, N, strain],
     )
 
     const isGraphene = mat.isGraphene
@@ -84,17 +103,14 @@ export function Properties() {
                 <span className="text-xs text-fg-b uppercase tracking-wider">Material</span>
                 <div className="grid grid-cols-2 gap-xs">
                     {MATERIAL_IDS.map(id => (
-                        <button
+                        <Button
                             key={id}
+                            label={id}
+                            variant={materialId === id ? 'active' : 'a'}
+                            size="sm"
+                            className="w-full py-sm"
                             onClick={() => setMaterialId(id)}
-                            className={`text-sm rounded-md py-sm transition-colors cursor-pointer ${
-                                materialId === id
-                                    ? 'bg-accent text-bg-a font-medium'
-                                    : 'bg-bg-c text-fg-b hover:text-fg-a hover:bg-bg-d'
-                            }`}
-                        >
-                            {id}
-                        </button>
+                        />
                     ))}
                 </div>
             </div>
@@ -126,17 +142,14 @@ export function Properties() {
                     />
                     <div className="flex gap-xs">
                         {(['n', 'p'] as DopingType[]).map(t => (
-                            <button
+                            <Button
                                 key={t}
+                                label={t === 'n' ? 'n-type' : 'p-type'}
+                                variant={dopingType === t ? 'active' : 'a'}
+                                size="sm"
+                                className="flex-1"
                                 onClick={() => setDopingType(t)}
-                                className={`flex-1 text-xs rounded-sm py-xs transition-colors cursor-pointer ${
-                                    dopingType === t
-                                        ? 'bg-accent text-bg-a font-medium'
-                                        : 'bg-bg-c text-fg-b hover:text-fg-a hover:bg-bg-d'
-                                }`}
-                            >
-                                {t === 'n' ? 'n-type' : 'p-type'}
-                            </button>
+                            />
                         ))}
                     </div>
                 </div>
