@@ -10,6 +10,7 @@ export function Explorer() {
     const [logDoping, setLogDoping] = useState(16)
     const [dopingType, setDopingType] = useState<DopingType>('n')
     const [strainPct, setStrainPct] = useState(0)
+    const [supercellN, setSupercellN] = useState(2)
 
     const mat = MATERIALS[materialId]
     const dopingConcentration = 10 ** logDoping
@@ -32,11 +33,13 @@ export function Explorer() {
                     logDoping={logDoping}
                     dopingType={dopingType}
                     strainPct={strainPct}
+                    supercellN={supercellN}
                     onMaterialChange={setMaterialId}
                     onTemperatureChange={setTemperature}
                     onLogDopingChange={setLogDoping}
                     onDopingTypeChange={setDopingType}
                     onStrainPctChange={setStrainPct}
+                    onSupercellNChange={setSupercellN}
                 />
             </aside>
 
@@ -49,6 +52,7 @@ export function Explorer() {
                     dopingConcentration={dopingConcentration}
                     dopingType={dopingType}
                     strain={strain}
+                    supercellN={supercellN}
                 />
             </main>
 

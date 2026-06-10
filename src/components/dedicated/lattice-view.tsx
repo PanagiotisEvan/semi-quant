@@ -15,15 +15,6 @@ const CIF_PATHS: Record<MaterialId, string> = {
     Graphene: '/cif/graphene.cif',
 }
 
-// ─── Supercell repetitions ─────────────────────────────────────────────────────
-
-const SUPERCELL: Record<MaterialId, [number, number, number]> = {
-    Si: [2, 2, 2],
-    Ge: [2, 2, 2],
-    GaN: [3, 3, 2],
-    Graphene: [4, 4, 1],
-}
-
 // ─── Cell parameters per material ──────────────────────────────────────────────
 
 interface CellParams {
@@ -75,6 +66,7 @@ interface LatticeViewerProps {
     dopingConcentration: number
     dopingType: DopingType
     strain: number
+    supercellN: number
 }
 
 export function LatticeViewer({
@@ -84,6 +76,7 @@ export function LatticeViewer({
     dopingConcentration,
     dopingType,
     strain,
+    supercellN,
 }: LatticeViewerProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewerRef = useRef<$3Dmol.GLViewer | null>(null)
@@ -144,37 +137,22 @@ export function LatticeViewer({
 
                     viewer.removeAllModels()
 
-                    // Build supercell fractional positions
-                    const [nx, ny, nz] = SUPERCELL[materialId]
-                    const fracAtoms: FracAtom[] = []
-
-                    for (let ix = 0; ix < nx; ix++) {
-                        for (let iy = 0; iy < ny; iy++) {
-                            for (let iz = 0; iz < nz; iz++) {
-                                for (const base of baseFrac) {
-                                    fracAtoms.push({
-                                        elem: base.elem,
-                                        fx: base.fx + ix,
-                                        fy: base.fy + iy,
-                                        fz: base.fz + iz,
-                                    })
-                                }
-                            }
-                        }
-                    }
-
-                    parsedRef.current[materialId] = { fracAtoms, gammaRad }
+                    // Store unit-cell atoms only; supercell expansion happens in buildXYZ
+                    parsedRef.current[materialId] = { fracAtoms: baseFrac, gammaRad }
                 }
             })
     }, [materialId])
 
-    // Build XYZ from fractional coords + strain (pure math, no 3Dmol)
-    const buildXYZ = useCallback((matId: MaterialId, strainVal: number, nu: number): string | null => {
+    // Build XYZ from unit-cell fractional coords, expanding to an n×n×n supercell
+    const buildXYZ = useCallback((matId: MaterialId, strainVal: number, nu: number, n: number): string | null => {
         const parsed = parsedRef.current[matId]
         if (!parsed) return null
 
         const cell = CELL_PARAMS[matId]
-        const { fracAtoms, gammaRad } = parsed
+        const { fracAtoms: baseFrac, gammaRad } = parsed
+
+        const isGraphene = matId === 'Graphene'
+        const nx = n, ny = n, nz = isGraphene ? 1 : n
 
         const sa = cell.a * (1 + strainVal)
         const sb = cell.b * (1 - nu * strainVal)
@@ -183,33 +161,40 @@ export function LatticeViewer({
         const cosG = Math.cos(gammaRad)
         const sinG = Math.sin(gammaRad)
 
-        // Strained lattice vectors
         const vax = sa, vay = 0
         const vbx = sb * cosG, vby = sb * sinG
         const vcz = sc
 
-        // Compute centered positions
-        let cx = 0, cy = 0, cz = 0
-        const n = fracAtoms.length
+        const totalAtoms = baseFrac.length * nx * ny * nz
+        const positions = new Float64Array(totalAtoms * 3)
+        const elems: string[] = []
+        let idx = 0, cx = 0, cy = 0, cz = 0
 
-        const positions = new Float64Array(n * 3)
-        for (let i = 0; i < n; i++) {
-            const a = fracAtoms[i]
-            const x = a.fx * vax + a.fy * vbx
-            const y = a.fx * vay + a.fy * vby
-            const z = a.fz * vcz
-            positions[i * 3] = x
-            positions[i * 3 + 1] = y
-            positions[i * 3 + 2] = z
-            cx += x; cy += y; cz += z
+        for (let ix = 0; ix < nx; ix++) {
+            for (let iy = 0; iy < ny; iy++) {
+                for (let iz = 0; iz < nz; iz++) {
+                    for (const base of baseFrac) {
+                        const fx = base.fx + ix
+                        const fy = base.fy + iy
+                        const fz = base.fz + iz
+                        const x = fx * vax + fy * vbx
+                        const y = fx * vay + fy * vby
+                        const z = fz * vcz
+                        positions[idx * 3]     = x
+                        positions[idx * 3 + 1] = y
+                        positions[idx * 3 + 2] = z
+                        cx += x; cy += y; cz += z
+                        elems.push(base.elem)
+                        idx++
+                    }
+                }
+            }
         }
-        cx /= n; cy /= n; cz /= n
+        cx /= totalAtoms; cy /= totalAtoms; cz /= totalAtoms
 
-        // Build XYZ string
-        const lines = [`${n}`, 'supercell']
-        for (let i = 0; i < n; i++) {
-            const a = fracAtoms[i]
-            lines.push(`${a.elem} ${(positions[i * 3] - cx).toFixed(4)} ${(positions[i * 3 + 1] - cy).toFixed(4)} ${(positions[i * 3 + 2] - cz).toFixed(4)}`)
+        const lines = [`${totalAtoms}`, 'supercell']
+        for (let i = 0; i < totalAtoms; i++) {
+            lines.push(`${elems[i]} ${(positions[i * 3] - cx).toFixed(4)} ${(positions[i * 3 + 1] - cy).toFixed(4)} ${(positions[i * 3 + 2] - cz).toFixed(4)}`)
         }
         return lines.join('\n')
     }, [])
@@ -223,7 +208,7 @@ export function LatticeViewer({
         viewer.removeAllShapes()
         viewer.removeAllLabels()
 
-        const xyz = buildXYZ(materialId, strain, mat.nu)
+        const xyz = buildXYZ(materialId, strain, mat.nu, supercellN)
         if (!xyz) return
 
         viewer.addModel(xyz, 'xyz')
@@ -235,16 +220,15 @@ export function LatticeViewer({
         lastStrainRef.current = strain
     }, [materialId, cifCache])
 
-    // Geometry update when strain changes (rebuild model, keep camera)
+    // Geometry update when strain or supercell size changes (rebuild model, keep camera)
     useEffect(() => {
         const viewer = viewerRef.current
         if (!viewer || !parsedRef.current[materialId]) return
         if (lastMaterialRef.current !== materialId) return // material effect handles this
-        if (lastStrainRef.current === strain) return
 
         viewer.removeAllModels()
 
-        const xyz = buildXYZ(materialId, strain, mat.nu)
+        const xyz = buildXYZ(materialId, strain, mat.nu, supercellN)
         if (!xyz) return
 
         viewer.addModel(xyz, 'xyz')
@@ -252,7 +236,7 @@ export function LatticeViewer({
         viewer.render() // no zoomTo — keep current camera
 
         lastStrainRef.current = strain
-    }, [strain])
+    }, [strain, supercellN])
 
     // Style-only update when doping changes (no geometry rebuild)
     useEffect(() => {

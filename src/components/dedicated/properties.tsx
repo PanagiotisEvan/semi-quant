@@ -45,11 +45,13 @@ interface PropertiesProps {
     logDoping: number
     dopingType: DopingType
     strainPct: number
+    supercellN: number
     onMaterialChange: (id: MaterialId) => void
     onTemperatureChange: (t: number) => void
     onLogDopingChange: (n: number) => void
     onDopingTypeChange: (d: DopingType) => void
     onStrainPctChange: (s: number) => void
+    onSupercellNChange: (n: number) => void
 }
 
 export function Properties({
@@ -58,11 +60,13 @@ export function Properties({
     logDoping: logN,
     dopingType,
     strainPct,
+    supercellN,
     onMaterialChange: setMaterialId,
     onTemperatureChange: setT,
     onLogDopingChange: setLogN,
     onDopingTypeChange: setDopingType,
     onStrainPctChange: setStrainPct,
+    onSupercellNChange: setSupercellN,
 }: PropertiesProps) {
     const mat    = MATERIALS[materialId]
     const N      = 10 ** logN
@@ -163,6 +167,16 @@ export function Properties({
                     formatValue={fmtStrain}
                     unit="%"
                     onChange={setStrainPct}
+                />
+
+                <Slider
+                    label="Size"
+                    value={supercellN}
+                    min={1}
+                    max={5}
+                    step={1}
+                    formatValue={(v) => isGraphene ? `${v}×${v}` : `${v}×${v}×${v}`}
+                    onChange={setSupercellN}
                 />
             </div>
 
