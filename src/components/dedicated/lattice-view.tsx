@@ -38,6 +38,19 @@ const ELEM_COLORS: Record<string, string> = {
     P: '#ff9900', B: '#3399ff', As: '#ff6644', Mg: '#aa44cc',
 }
 
+const ELEM_NAMES: Record<string, string> = {
+    Si: 'Silicon',   Ge: 'Germanium', Ga: 'Gallium',   N: 'Nitrogen',
+    C:  'Carbon',    P:  'Phosphorus', B:  'Boron',      As: 'Arsenic',
+    Mg: 'Magnesium',
+}
+
+const HOST_ATOMS: Record<MaterialId, string[]> = {
+    Si:       ['Si'],
+    Ge:       ['Ge'],
+    GaN:      ['Ga', 'N'],
+    Graphene: ['C'],
+}
+
 const ELEM_RADII: Record<string, number> = {
     Si: 0.45, Ge: 0.47, Ga: 0.42, N: 0.35, C: 0.38,
     P: 0.48, B: 0.36, As: 0.50, Mg: 0.44,
@@ -55,6 +68,49 @@ interface FracAtom {
 interface ParsedMaterial {
     fracAtoms: FracAtom[]  // all supercell atoms in fractional coords
     gammaRad: number
+}
+
+// ─── Legend ────────────────────────────────────────────────────────────────────
+
+interface LegendProps {
+    materialId: MaterialId
+    dopingType: DopingType
+    dopingConcentration: number
+}
+
+function Legend({ materialId, dopingType, dopingConcentration }: LegendProps) {
+    const hosts   = HOST_ATOMS[materialId]
+    const dopant  = dopantAtomSymbol(materialId, dopingType)
+    const hasDopant = dopantVisualCount(dopingConcentration) > 0
+
+    return (
+        <div
+            className="absolute bottom-lg left-lg flex flex-col gap-xs rounded-md border border-bg-d px-md py-sm pointer-events-none"
+            style={{ backgroundColor: 'rgba(0,0,0,0.72)' }}
+        >
+            {hosts.map(elem => (
+                <div key={elem} className="flex items-center gap-sm">
+                    <span
+                        className="w-[10px] h-[10px] rounded-full flex-shrink-0"
+                        style={{ backgroundColor: ELEM_COLORS[elem] }}
+                    />
+                    <span className="text-xs text-fg-a font-mono">{elem}</span>
+                    <span className="text-xs text-fg-b">{ELEM_NAMES[elem]} — host</span>
+                </div>
+            ))}
+            <div className={`flex items-center gap-sm ${hasDopant ? '' : 'opacity-40'}`}>
+                <span
+                    className="w-[10px] h-[10px] rounded-full flex-shrink-0"
+                    style={{ backgroundColor: ELEM_COLORS[dopant] }}
+                />
+                <span className="text-xs text-fg-a font-mono">{dopant}</span>
+                <span className="text-xs text-fg-b">
+                    {ELEM_NAMES[dopant]} — {dopingType}-type dopant
+                    {!hasDopant && ' (below threshold)'}
+                </span>
+            </div>
+        </div>
+    )
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -249,11 +305,14 @@ export function LatticeViewer({
     }, [dopingConcentration, dopingType, temperature])
 
     return (
-        <div
-            ref={containerRef}
-            className="w-full h-full"
-            style={{ position: 'relative' }}
-        />
+        <div className="relative w-full h-full">
+            <div ref={containerRef} className="w-full h-full" />
+            <Legend
+                materialId={materialId}
+                dopingType={dopingType}
+                dopingConcentration={dopingConcentration}
+            />
+        </div>
     )
 }
 
