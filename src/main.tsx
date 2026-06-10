@@ -3,10 +3,10 @@ import { createRoot } from 'react-dom/client'
 
 import './index.css'
 
-import { App } from './app'
+import { Explorer } from './pages/explorer'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Explorer />
   </StrictMode>,
 )

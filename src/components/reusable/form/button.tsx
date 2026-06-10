@@ -1,38 +1,36 @@
 interface ButtonProps {
     label?: React.ReactNode
     className?: string
-    variant?: 'a' | 'b' | 'alpha'
+    variant?: 'a' | 'b' | 'active' | 'alpha'
     size?: 'fit' | 'sm' | 'md' | 'lg'
     onClick?: () => void
 }
 
 export function Button({
-                           label = 'Button',
-                           variant = 'a',
-                           size = 'md',
-                           className,
-                           onClick,
-                       }: ButtonProps) {
-    // Button types
+    label = 'Button',
+    variant = 'a',
+    size = 'md',
+    className,
+    onClick,
+}: ButtonProps) {
     const variants = {
-        a: 'bg-c px-md py-sm',
-        b: 'bg-d px-md py-sm',
-        alpha: 'bg-none p-none',
+        a: 'bg-bg-c text-fg-b hover:text-fg-a hover:bg-bg-d',
+        b: 'bg-bg-d text-fg-b hover:text-fg-a hover:bg-bg-e',
+        active: 'bg-accent text-bg-a font-medium',
+        alpha: 'bg-transparent text-fg-b hover:text-fg-a',
     }
 
-    // Button sizes
     const sizes = {
-        fit: 'w-fit h-fit p4',
-
-        sm: 'w-[7.5rem] h-[2rem] p4',
-        md: 'w-[8.75rem] h-[2.5rem] p3',
-        lg: 'w-[11rem] h-[3.5rem] p2',
+        fit: 'w-fit h-fit px-md py-sm',
+        sm: 'px-sm py-xs',
+        md: 'px-md py-sm',
+        lg: 'px-lg py-md',
     }
 
     return (
         <button
             onClick={onClick}
-            className={`cursor-pointer rounded-full ${className} ${variants[variant]} ${sizes[size]}`}
+            className={`cursor-pointer rounded-md text-sm transition-colors ${variants[variant]} ${sizes[size]} ${className ?? ''}`}
         >
             {label}
         </button>

@@ -140,7 +140,6 @@ export function computeProperties(
   mat: MaterialParams,
   T: number,
   N: number,
-  type: DopingType,
   strain: number,
 ): SemiconductorProperties {
   const Eg           = bandGap(mat, T, strain);
