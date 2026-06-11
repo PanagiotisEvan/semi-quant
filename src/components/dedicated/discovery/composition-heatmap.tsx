@@ -207,7 +207,7 @@ export function CompositionHeatmap({ constraints, processedFraction = 1 }: Heatm
 
     return (
         <div className="box">
-            <div ref={containerRef} className="w-full h-[400px]" />
+            <div ref={containerRef} className="w-full h-100" />
         </div>
     )
 }
