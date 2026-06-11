@@ -1,57 +1,40 @@
-import { useState } from 'react'
-import { Navbar } from '../components/layout/navbar'
-import { Properties } from '../components/dedicated/properties'
-import { LatticeViewer } from '../components/dedicated/lattice-view'
-import { MATERIALS } from '../data/materials'
-import type { MaterialId, DopingType } from '../data/formulas'
+import { Properties, LatticeViewer } from '@/components'
+import { useSimulation } from '@/hooks'
 
 export function Explorer() {
-    const [materialId, setMaterialId] = useState<MaterialId>('Si')
-    const [temperature, setTemperature] = useState(300)
-    const [logDoping, setLogDoping] = useState(16)
-    const [dopingType, setDopingType] = useState<DopingType>('n')
-    const [strainPct, setStrainPct] = useState(0)
-    const [supercellN, setSupercellN] = useState(2)
-
-    const mat = MATERIALS[materialId]
-    const dopingConcentration = 10 ** logDoping
-    const strain = strainPct / 100
+    const { state, derived, actions } = useSimulation()
 
     return (
-        <div className="w-full h-screen grid grid-cols-[320px_1fr] grid-rows-[auto_1fr] gap-0 overflow-hidden">
+        <div className="w-full h-full grid grid-cols-[320px_1fr] overflow-hidden">
 
-            <div className="col-span-2">
-                <Navbar subtitle="Material Explorer" />
-            </div>
-
-            {/* Left — Properties panel */}
-            <aside className="row-start-2 border-r border-bg-d overflow-y-auto">
+            <aside className="overflow-y-auto [scrollbar-width:none] m-md bg-bg-b rounded-lg">
                 <Properties
-                    materialId={materialId}
-                    temperature={temperature}
-                    logDoping={logDoping}
-                    dopingType={dopingType}
-                    strainPct={strainPct}
-                    supercellN={supercellN}
-                    onMaterialChange={setMaterialId}
-                    onTemperatureChange={setTemperature}
-                    onLogDopingChange={setLogDoping}
-                    onDopingTypeChange={setDopingType}
-                    onStrainPctChange={setStrainPct}
-                    onSupercellNChange={setSupercellN}
+                    materialId={state.materialId}
+                    temperature={state.temperature}
+                    logDoping={state.logDoping}
+                    dopingType={state.dopingType}
+                    strainPct={state.strainPct}
+                    supercellN={state.supercellN}
+                    mat={derived.mat}
+                    properties={derived.properties}
+                    onMaterialChange={actions.setMaterialId}
+                    onTemperatureChange={actions.setTemperature}
+                    onLogDopingChange={actions.setLogDoping}
+                    onDopingTypeChange={actions.setDopingType}
+                    onStrainPctChange={actions.setStrainPct}
+                    onSupercellNChange={actions.setSupercellN}
                 />
             </aside>
 
-            {/* Center — Viewfinder */}
-            <main className="row-start-2 overflow-hidden">
+            <main className="overflow-hidden">
                 <LatticeViewer
-                    materialId={materialId}
-                    mat={mat}
-                    temperature={temperature}
-                    dopingConcentration={dopingConcentration}
-                    dopingType={dopingType}
-                    strain={strain}
-                    supercellN={supercellN}
+                    materialId={state.materialId}
+                    mat={derived.mat}
+                    temperature={state.temperature}
+                    dopingConcentration={derived.dopingConcentration}
+                    dopingType={state.dopingType}
+                    strain={derived.strain}
+                    supercellN={state.supercellN}
                 />
             </main>
 

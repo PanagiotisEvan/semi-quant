@@ -1,8 +1,5 @@
-import { useMemo } from 'react'
-import { Slider } from '../reusable/form/slider'
-import { Button } from '../reusable/form/button'
-import { MATERIALS } from '../../data/materials'
-import { computeProperties, type MaterialId, type DopingType } from '../../data/formulas'
+import { Slider, Button } from '@/components'
+import type { MaterialId, DopingType, SemiconductorProperties, MaterialParams } from '@/data/formulas.ts'
 
 const MATERIAL_IDS: MaterialId[] = ['Si', 'Ge', 'GaN', 'Graphene']
 
@@ -33,11 +30,7 @@ function fmtDoping(v: number): string {
     return `10${toSuperscript(v)}`
 }
 
-interface ReadoutRow {
-    label: string
-    value: string
-    unit: string
-}
+interface ReadoutRow { label: string; value: string; unit: string }
 
 interface PropertiesProps {
     materialId: MaterialId
@@ -46,6 +39,8 @@ interface PropertiesProps {
     dopingType: DopingType
     strainPct: number
     supercellN: number
+    mat: MaterialParams
+    properties: SemiconductorProperties
     onMaterialChange: (id: MaterialId) => void
     onTemperatureChange: (t: number) => void
     onLogDopingChange: (n: number) => void
@@ -61,6 +56,8 @@ export function Properties({
     dopingType,
     strainPct,
     supercellN,
+    mat,
+    properties: props,
     onMaterialChange: setMaterialId,
     onTemperatureChange: setT,
     onLogDopingChange: setLogN,
@@ -68,15 +65,6 @@ export function Properties({
     onStrainPctChange: setStrainPct,
     onSupercellNChange: setSupercellN,
 }: PropertiesProps) {
-    const mat    = MATERIALS[materialId]
-    const N      = 10 ** logN
-    const strain = strainPct / 100
-
-    const props = useMemo(
-        () => computeProperties(mat, T, N, strain),
-        [mat, T, N, strain],
-    )
-
     const isGraphene = mat.isGraphene
 
     const carrierUnit = isGraphene ? 'cm⁻²' : 'cm⁻³'
@@ -84,23 +72,19 @@ export function Properties({
     const rhoUnit     = isGraphene ? 'Ω/□'  : 'Ω·cm'
 
     const rows: ReadoutRow[] = [
-        { label: 'Band gap',  value: fmtFixed(props.Eg,    3), unit: 'eV'         },
-        { label: 'n',         value: fmtSci(props.n),         unit: carrierUnit    },
-        ...(!isGraphene ? [
-            { label: 'p',  value: fmtSci(props.p),  unit: 'cm⁻³' },
-            { label: 'nᵢ', value: fmtSci(props.ni), unit: 'cm⁻³' },
-        ] : []),
-        { label: 'μₙ',        value: fmtFixed(props.mu_n, 0), unit: 'cm²/V·s'    },
-        ...(!isGraphene ? [
-            { label: 'μₚ', value: fmtFixed(props.mu_p, 0), unit: 'cm²/V·s' },
-        ] : []),
-        { label: 'σ',         value: fmtSci(props.sigma),     unit: sigmaUnit     },
-        { label: 'ρ',         value: fmtSci(props.rho),       unit: rhoUnit       },
-        { label: 'a',         value: fmtFixed(props.a, 4),    unit: 'Å'           },
+        { label: 'Band gap', value: fmtFixed(props.Eg, 3),     unit: 'eV'       },
+        { label: 'n',        value: fmtSci(props.n),           unit: carrierUnit },
+        { label: 'p',        value: isGraphene ? '—' : fmtSci(props.p),  unit: isGraphene ? '' : 'cm⁻³' },
+        { label: 'nᵢ',       value: isGraphene ? '—' : fmtSci(props.ni), unit: isGraphene ? '' : 'cm⁻³' },
+        { label: 'μₙ',       value: fmtFixed(props.mu_n, 0),   unit: 'cm²/V·s'  },
+        { label: 'μₚ',       value: isGraphene ? '—' : fmtFixed(props.mu_p, 0), unit: isGraphene ? '' : 'cm²/V·s' },
+        { label: 'σ',        value: fmtSci(props.sigma),       unit: sigmaUnit   },
+        { label: 'ρ',        value: fmtSci(props.rho),         unit: rhoUnit     },
+        { label: 'a',        value: fmtFixed(props.a, 4),      unit: 'Å'         },
     ]
 
     return (
-        <div className="flex flex-col gap-lg p-lg h-full">
+        <div className="flex flex-col gap-lg p-lg pb-xl">
 
             {/* Material selector */}
             <div className="flex flex-col gap-sm">
@@ -119,7 +103,7 @@ export function Properties({
                 </div>
             </div>
 
-            <div className="h-px bg-bg-d" />
+            <hr className="divider-b" />
 
             {/* Controls */}
             <div className="flex flex-col gap-lg">
@@ -180,20 +164,20 @@ export function Properties({
                 />
             </div>
 
-            <div className="h-px bg-bg-d" />
+            <hr className="divider-b" />
 
             {/* Readout */}
-            <div className="flex flex-col gap-sm flex-1">
+            <div className="flex flex-col gap-sm">
                 <span className="text-xs text-fg-b uppercase tracking-wider">Computed</span>
                 <div className="grid grid-cols-[auto_1fr] gap-x-lg gap-y-xs">
                     {rows.map(({ label, value, unit }) => (
-                        <>
-                            <span key={`${label}-l`} className="text-sm text-fg-b">{label}</span>
-                            <span key={`${label}-v`} className="text-sm font-mono text-fg-a text-right">
+                        <div key={label} className="contents">
+                            <span className="text-sm text-fg-b">{label}</span>
+                            <span className="text-sm font-mono text-fg-a text-right">
                                 {value}
-                                <span className="text-fg-b text-xs ml-1">{unit}</span>
+                                {unit && <span className="text-fg-b text-xs ml-1">{unit}</span>}
                             </span>
-                        </>
+                        </div>
                     ))}
                 </div>
             </div>

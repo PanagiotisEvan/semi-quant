@@ -5,6 +5,10 @@
 @import 'styles/tokens/colors.css';
 
 @import 'styles/utilities/typography.css';
+@import 'styles/utilities/background.css';
+@import 'styles/utilities/divider.css';
+@import 'styles/utilities/box.css';
+@import 'styles/components/slider.css';
 
 
 

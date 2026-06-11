@@ -23,6 +23,7 @@ export function Slider({
 }: SliderProps) {
     const id = useId()
     const display = formatValue ? formatValue(value) : String(value)
+    const percent = ((value - min) / (max - min)) * 100
 
     return (
         <div className="flex flex-col gap-2">
@@ -35,16 +36,31 @@ export function Slider({
                 </span>
             </div>
 
-            <input
-                id={id}
-                type="range"
-                min={min}
-                max={max}
-                step={step}
-                value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full accent-accent"
-            />
+            <div className="relative h-5 flex items-center">
+                {/* Track background */}
+                <div className="absolute inset-x-0 h-[6px] rounded-full bg-bg-d overflow-hidden">
+                    {/* Filled portion */}
+                    <div
+                        className="h-full rounded-full"
+                        style={{
+                            width: `${percent}%`,
+                            backgroundColor: 'var(--color-accent)',
+                        }}
+                    />
+                </div>
+
+                {/* Native input */}
+                <input
+                    id={id}
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={value}
+                    onChange={(e) => onChange(Number(e.target.value))}
+                    className="slider-input absolute inset-0 w-full appearance-none bg-transparent cursor-pointer"
+                />
+            </div>
         </div>
     )
 }
