@@ -12,9 +12,11 @@ function bandGap(x: number): number {
 
 interface HeatmapProps {
     constraints: DiscoveryConstraints
+    /** 0–1, how far through the composition space we've scanned */
+    processedFraction?: number
 }
 
-export function CompositionHeatmap({ constraints }: HeatmapProps) {
+export function CompositionHeatmap({ constraints, processedFraction = 1 }: HeatmapProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<echarts.ECharts | null>(null)
 
@@ -43,17 +45,26 @@ export function CompositionHeatmap({ constraints }: HeatmapProps) {
 
         const xSteps = 100
         const ySteps = 60
-        const xMin = 0, xMax = 1
         const yMin = 0.4, yMax = 3.4
+
+        // Only render up to the processed fraction of the x-axis
+        const maxXi = Math.round(processedFraction * (xSteps - 1))
 
         const heatmapData: [number, number, number][] = []
 
         for (let xi = 0; xi < xSteps; xi++) {
-            const x = xMin + (xi / (xSteps - 1)) * (xMax - xMin)
+            const x = xi / (xSteps - 1)
             const eg = bandGap(x)
 
             for (let yi = 0; yi < ySteps; yi++) {
                 const y = yMin + (yi / (ySteps - 1)) * (yMax - yMin)
+
+                // Beyond processed range — show nothing
+                if (xi > maxXi) {
+                    heatmapData.push([xi, yi, 0])
+                    continue
+                }
+
                 const dist = Math.abs(y - eg)
                 const spread = 0.15 + 0.3 * x
 
@@ -66,9 +77,11 @@ export function CompositionHeatmap({ constraints }: HeatmapProps) {
             }
         }
 
+        // Band gap curve — only up to processed fraction
         const curveData: [number, number][] = []
         for (let i = 0; i <= 50; i++) {
             const x = i / 50
+            if (x > processedFraction) break
             curveData.push([x, bandGap(x)])
         }
 
@@ -161,6 +174,19 @@ export function CompositionHeatmap({ constraints }: HeatmapProps) {
                         ]],
                     },
                 },
+                // Scan line — vertical line showing where we are
+                ...(processedFraction < 1 ? [{
+                    type: 'line' as const,
+                    data: [[maxXi, 0], [maxXi, ySteps - 1]],
+                    symbol: 'none',
+                    lineStyle: {
+                        color: '#90d549',
+                        width: 1,
+                        type: 'dashed' as const,
+                        opacity: 0.6,
+                    },
+                    z: 15,
+                }] : []),
             ],
             tooltip: {
                 trigger: 'item',
@@ -177,7 +203,7 @@ export function CompositionHeatmap({ constraints }: HeatmapProps) {
                 },
             },
         }, true)
-    }, [constraints])
+    }, [constraints, processedFraction])
 
     return (
         <div className="box">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as $3Dmol from '3dmol'
 import type { MaterialId, MaterialParams, DopingType } from '@/data/formulas.ts'
 import { dopantVisualCount, dopantAtomSymbol } from '@/data/formulas.ts'
@@ -40,45 +40,34 @@ interface ParsedMaterial { fracAtoms: FracAtom[]; gammaRad: number }
 
 // ─── Styling helper ────────────────────────────────────────────────────────────
 
-function applyStyles(
-    viewer: $3Dmol.GLViewer,
-    materialId: MaterialId,
-    dopingConcentration: number,
-    dopingType: DopingType,
-) {
-    const primaryElem = materialId === 'GaN' ? 'Ga'
-        : materialId === 'Graphene' ? 'C'
-        : materialId === 'Ge' ? 'Ge' : 'Si'
-
-    const dopantCount = dopantVisualCount(dopingConcentration)
-    const dopantSym = dopantAtomSymbol(materialId, dopingType)
-    const dopantColor = ELEM_COLORS[dopantSym] ?? '#ff9900'
-    const dopantRadius = ELEM_RADII[dopantSym] ?? 0.40
-
+function applyStyles(viewer: $3Dmol.GLViewer) {
     for (const elem of Object.keys(ELEM_COLORS)) {
         viewer.setStyle({ elem }, {
             sphere: { radius: ELEM_RADII[elem] ?? 0.40, color: ELEM_COLORS[elem] },
             stick: { radius: 0.08, color: '#2c2c2c' },
         })
     }
+}
 
-    if (dopantCount > 0) {
-        const primaryAtoms = viewer.selectedAtoms({ elem: primaryElem })
-        const step = Math.max(1, Math.floor(primaryAtoms.length / dopantCount))
+// ─── Heat overlay helper ───────────────────────────────────────────────────────
 
-        for (let i = 0; i < dopantCount && i * step < primaryAtoms.length; i++) {
-            const atom = primaryAtoms[i * step]
-            if (atom?.serial !== undefined) {
-                viewer.setStyle(
-                    { serial: atom.serial },
-                    {
-                        sphere: { radius: dopantRadius, color: dopantColor },
-                        stick: { radius: 0.08, color: '#2c2c2c' },
-                    },
-                )
+function useHeatOverlay(temperature: number) {
+    return useMemo(() => {
+        const t = Math.max(0, Math.min(1, (temperature - 100) / 600))
+
+        if (t < 0.25) {
+            const intensity = (0.25 - t) / 0.25
+            return {
+                background: `radial-gradient(ellipse at center, rgba(60,120,220,${intensity * 0.12}) 0%, transparent 70%)`,
+            }
+        } else if (t > 0.5) {
+            const intensity = (t - 0.5) / 0.5
+            return {
+                background: `radial-gradient(ellipse at center, rgba(255,${Math.round(120 - intensity * 60)},${Math.round(40 - intensity * 30)},${intensity * 0.18}) 0%, transparent 70%)`,
             }
         }
-    }
+        return { background: 'none' }
+    }, [temperature])
 }
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
@@ -112,31 +101,22 @@ export function LatticeViewer({
     const lastStrainRef = useRef<number | null>(null)
     const lastMaterialRef = useRef<MaterialId | null>(null)
 
-    // Hooks
     const legendItems = useLegendItems(materialId, dopingType, dopingConcentration)
     const { tooltip, attachHoverable } = useAtomHover(viewerRef.current, wrapperRef.current)
     const renderWireframe = useUnitCellWireframe(viewerRef.current, materialId, strain, mat.nu, supercellN)
+    const heatStyle = useHeatOverlay(temperature)
 
     useAutoSpin(viewerRef.current, materialId)
 
     const latticeConstant = mat.a0 * (1 + strain)
 
-    // Create the viewer once
     useEffect(() => {
         if (!canvasRef.current || viewerRef.current) return
-
-        const viewer = $3Dmol.createViewer(canvasRef.current, {
-            backgroundColor: '#000000',
-        })
+        const viewer = $3Dmol.createViewer(canvasRef.current, { backgroundColor: '#000000' })
         viewerRef.current = viewer
-
-        return () => {
-            viewer.clear()
-            viewerRef.current = null
-        }
+        return () => { viewer.clear(); viewerRef.current = null }
     }, [])
 
-    // Fetch & parse CIF
     useEffect(() => {
         const path = CIF_PATHS[materialId]
         if (cifCache[path]) return
@@ -172,8 +152,15 @@ export function LatticeViewer({
             })
     }, [materialId])
 
-    // Build XYZ string
-    const buildXYZ = useCallback((matId: MaterialId, strainVal: number, nu: number, n: number): string | null => {
+    // Build XYZ with dopant elements baked in
+    const buildXYZ = useCallback((
+        matId: MaterialId,
+        strainVal: number,
+        nu: number,
+        n: number,
+        dopConc: number,
+        dopType: DopingType,
+    ): string | null => {
         const parsed = parsedRef.current[matId]
         if (!parsed) return null
 
@@ -197,6 +184,17 @@ export function LatticeViewer({
         const elems: string[] = []
         let idx = 0, cx = 0, cy = 0, cz = 0
 
+        // Determine the primary element that gets doped
+        const primaryElem = matId === 'GaN' ? 'Ga'
+            : matId === 'Graphene' ? 'C'
+            : matId === 'Ge' ? 'Ge' : 'Si'
+
+        const dopantCount = dopantVisualCount(dopConc)
+        const dopantSym = dopantAtomSymbol(matId, dopType)
+
+        // Track which primary-element atoms to dope
+        const primaryIndices: number[] = []
+
         for (let ix = 0; ix < nx; ix++) {
             for (let iy = 0; iy < ny; iy++) {
                 for (let iz = 0; iz < nz; iz++) {
@@ -209,6 +207,10 @@ export function LatticeViewer({
                         positions[idx * 3 + 1] = y
                         positions[idx * 3 + 2] = z
                         cx += x; cy += y; cz += z
+
+                        if (base.elem === primaryElem) {
+                            primaryIndices.push(idx)
+                        }
                         elems.push(base.elem)
                         idx++
                     }
@@ -217,6 +219,15 @@ export function LatticeViewer({
         }
         cx /= totalAtoms; cy /= totalAtoms; cz /= totalAtoms
 
+        // Replace dopant positions in the element array
+        if (dopantCount > 0 && primaryIndices.length > 0) {
+            const step = Math.max(1, Math.floor(primaryIndices.length / dopantCount))
+            for (let i = 0; i < dopantCount && i * step < primaryIndices.length; i++) {
+                const atomIdx = primaryIndices[i * step]
+                elems[atomIdx] = dopantSym
+            }
+        }
+
         const lines = [`${totalAtoms}`, 'supercell']
         for (let i = 0; i < totalAtoms; i++) {
             lines.push(`${elems[i]} ${(positions[i * 3] - cx).toFixed(4)} ${(positions[i * 3 + 1] - cy).toFixed(4)} ${(positions[i * 3 + 2] - cz).toFixed(4)}`)
@@ -224,7 +235,6 @@ export function LatticeViewer({
         return lines.join('\n')
     }, [])
 
-    // Helper: full scene rebuild
     const rebuildScene = useCallback((zoom: boolean) => {
         const viewer = viewerRef.current
         if (!viewer || !parsedRef.current[materialId]) return
@@ -232,11 +242,11 @@ export function LatticeViewer({
         viewer.removeAllModels()
         viewer.removeAllShapes()
 
-        const xyz = buildXYZ(materialId, strain, mat.nu, supercellN)
+        const xyz = buildXYZ(materialId, strain, mat.nu, supercellN, dopingConcentration, dopingType)
         if (!xyz) return
 
         viewer.addModel(xyz, 'xyz')
-        applyStyles(viewer, materialId, dopingConcentration, dopingType)
+        applyStyles(viewer)
         attachHoverable()
         renderWireframe()
 
@@ -260,21 +270,31 @@ export function LatticeViewer({
         rebuildScene(false)
     }, [strain, supercellN])
 
-    // Style + shapes update on doping / temperature change
+    // Doping changes need a full rebuild now (element symbols change in XYZ)
+    useEffect(() => {
+        if (!viewerRef.current || !parsedRef.current[materialId]) return
+        if (lastMaterialRef.current !== materialId) return
+        rebuildScene(false)
+    }, [dopingConcentration, dopingType])
+
+    // Temperature only needs wireframe redraw + heat overlay (handled by React)
     useEffect(() => {
         const viewer = viewerRef.current
         if (!viewer || !viewer.getModel()) return
 
         viewer.removeAllShapes()
-        applyStyles(viewer, materialId, dopingConcentration, dopingType)
-        attachHoverable()
         renderWireframe()
         viewer.render()
-    }, [dopingConcentration, dopingType, temperature])
+    }, [temperature])
 
     return (
         <div ref={wrapperRef} className="relative w-full h-full">
             <div ref={canvasRef} className="absolute inset-0" />
+
+            <div
+                className="absolute inset-0 pointer-events-none transition-all duration-300"
+                style={heatStyle}
+            />
 
             <CellInfo
                 materialId={materialId}
